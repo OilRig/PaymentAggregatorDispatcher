@@ -1,0 +1,18 @@
+﻿@model PaymentAggregatorDispatcher.Models.SetupModel
+@{
+    ViewData["Title"] = "Home Page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Настроки</h1>
+</div>
+@foreach (var map in Model.Maps)
+{
+<div>
+    <label>Адрес</label>
+    <input type="text" value="@map.Address" /> <br />
+
+    <label>Токен</label>
+    <input type="text" value="@map.Token" />
+</div>
+}
