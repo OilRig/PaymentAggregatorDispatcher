@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PaymentDispatcher.Database.Context;
 using PaymentDispatcher.Database.Domain;
 using System;
 using System.Collections.Generic;
@@ -27,6 +29,10 @@ namespace PaymentAggregatorDispatcher
             services.AddControllersWithViews().AddNewtonsoftJson();
 
             services.AddScoped<IPaymentDispatcherDomain, PaymentDispatcherDomain>();
+
+            var connection = Configuration.GetConnectionString("DispatcherDb");
+
+            services.AddDbContext<DatabaseContext>(options => options.UseSqlServer(connection));
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

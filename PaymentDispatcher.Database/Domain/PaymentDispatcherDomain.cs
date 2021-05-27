@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using BaltBet.Payment.Data.Enums;
+using PaymentDispatcher.Database.Context;
 
 namespace PaymentDispatcher.Database.Domain
 {
@@ -25,37 +26,38 @@ namespace PaymentDispatcher.Database.Domain
 
     public class PaymentDispatcherDomain : IPaymentDispatcherDomain
     {
+        private readonly DatabaseContext _context;
+
+        public PaymentDispatcherDomain(DatabaseContext context)
+        {
+            _context = context;
+        }
+
         async Task IPaymentDispatcherDomain.AddDispatcherRecord(DispatcherDBRequest dispatcherDBRequest)
         {
-            using Context.DatabaseContext ctx = new();
+            await _context.DispatcherPaymentRequests.AddAsync(dispatcherDBRequest);
 
-            await ctx.DispatcherPaymentRequests.AddAsync(dispatcherDBRequest);
-
-            await ctx.SaveChangesAsync();
+            await _context.SaveChangesAsync();
         }
 
         async Task IPaymentDispatcherDomain.SetDispatchRequestCompleted(string dispatcherRequestToken)
         {
-            using Context.DatabaseContext ctx = new();
-
-            var request = await ctx.DispatcherPaymentRequests.FirstOrDefaultAsync(req => req.UniqueRequestToken == dispatcherRequestToken
+            var request = await _context.DispatcherPaymentRequests.FirstOrDefaultAsync(req => req.UniqueRequestToken == dispatcherRequestToken
             && req.IsActive);
 
             if (request != null)
             {
                 request.IsActive = false;
 
-                ctx.Entry(request).State = EntityState.Modified;
+                _context.Entry(request).State = EntityState.Modified;
 
-                await ctx.SaveChangesAsync();
+                await _context.SaveChangesAsync();
             }
         }
 
         async ValueTask<string> IPaymentDispatcherDomain.GetAggregatorAddressByToken(string token)
         {
-            using Context.DatabaseContext ctx = new();
-
-            var map = await ctx.AggregatorTokenMaps.FirstOrDefaultAsync(map => map.AggregatorToken == token);
+            var map = await _context.AggregatorTokenMaps.FirstOrDefaultAsync(map => map.AggregatorToken == token);
 
             if (map != null)
                 return map.AggregatorAddress;
@@ -65,8 +67,7 @@ namespace PaymentDispatcher.Database.Domain
 
         async ValueTask<DTO.AggregatorTokenMap[]> IPaymentDispatcherDomain.GetMaps()
         {
-            using Context.DatabaseContext ctx = new();
-            return await ctx.AggregatorTokenMaps.Select(m => new DTO.AggregatorTokenMap()
+            return await _context.AggregatorTokenMaps.Select(m => new DTO.AggregatorTokenMap()
             {
                 Address = m.AggregatorAddress,
                 Token   = m.AggregatorToken,
@@ -76,9 +77,7 @@ namespace PaymentDispatcher.Database.Domain
 
         async ValueTask<DispatcherRequest[]> IPaymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method)
         {
-            using Context.DatabaseContext ctx = new();
-
-            var requests = await ctx.DispatcherPaymentRequests
+            var requests = await _context.DispatcherPaymentRequests
                 .Where(r => r.Method == method && r.Intent == intent && r.IsActive)
                 .ToArrayAsync();
 
