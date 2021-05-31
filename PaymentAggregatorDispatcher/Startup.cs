@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PaymentAggregatorDispatcher.HttpClients;
 using PaymentDispatcher.Database.Context;
 using PaymentDispatcher.Database.Domain;
 using System;
@@ -29,6 +30,8 @@ namespace PaymentAggregatorDispatcher
             services.AddControllersWithViews().AddNewtonsoftJson();
 
             services.AddScoped<IPaymentDispatcherDomain, PaymentDispatcherDomain>();
+            services.AddScoped<IDispatcherHttpClient, DispatcherHttpClient>();
+            services.AddHttpClient<IDispatcherHttpClient, DispatcherHttpClient>();
 
             var connection = Configuration.GetConnectionString("DispatcherDb");
 

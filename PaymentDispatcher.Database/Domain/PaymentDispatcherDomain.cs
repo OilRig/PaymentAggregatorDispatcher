@@ -15,6 +15,7 @@ namespace PaymentDispatcher.Database.Domain
     {
         Task AddDispatcherRecord(DispatcherDBRequest dispatcherDBRequest);
 
+        Task CancelDispatcherRequest(DispatcherRequest dispatcherRequest);
         ValueTask<DispatcherRequest[]> GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method);
 
         Task SetDispatchRequestCompleted(string dispatcherRequestToken);
@@ -95,6 +96,21 @@ namespace PaymentDispatcher.Database.Domain
             }
 
             return Array.Empty<DispatcherRequest>();
+        }
+
+        async Task IPaymentDispatcherDomain.CancelDispatcherRequest(DispatcherRequest dispatcherRequest)
+        {
+            var request = _context.DispatcherPaymentRequests.FirstOrDefault(r => r.IsActive && r.UniqueRequestToken == dispatcherRequest.UniqueRequestToken
+             && r.UniqueAggregatorToken == dispatcherRequest.UniqueAggregatorToken);
+
+            if(request != null)
+            {
+                request.IsActive = false;
+
+                _context.Entry(request).State = EntityState.Modified;
+
+                await _context.SaveChangesAsync();
+            }
         }
     }
 }

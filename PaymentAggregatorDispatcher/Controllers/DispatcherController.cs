@@ -54,7 +54,7 @@ namespace PaymentAggregatorDispatcher.Controllers
         {
             try
             {
-                //await _paymentDispatcherDomain.CancelDispatchRequest(dispatcherRequest);
+                await _paymentDispatcherDomain.CancelDispatcherRequest(dispatcherRequest);
 
                 return Ok();
             }

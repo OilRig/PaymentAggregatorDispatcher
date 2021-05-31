@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using PaymentAggregatorDispatcher.HttpClients;
 using PaymentDispatcher.Data.Identities;
 using PaymentDispatcher.Database.Domain;
 using System;
@@ -20,12 +21,14 @@ namespace PaymentAggregatorDispatcher.Controllers
     {
         private readonly IPaymentDispatcherDomain _paymentDispatcherDomain;
         private readonly ILogger<CallbackController> _logger;
+        private readonly IDispatcherHttpClient _httpClientSvc;
 
         public CallbackController(IPaymentDispatcherDomain paymentDispatcherDomain,
-           ILogger<CallbackController> logger)
+           ILogger<CallbackController> logger, IDispatcherHttpClient dispatcherHttpClient)
         {
             _paymentDispatcherDomain = paymentDispatcherDomain;
             _logger = logger;
+            _httpClientSvc = dispatcherHttpClient;
         }
 
         struct AwaitingAddressResult
@@ -46,12 +49,11 @@ namespace PaymentAggregatorDispatcher.Controllers
         {
             foreach(DispatcherRequest dispatcherRequest in requests)
             {
-                using HttpClient client = new();
                 using JsonContent content = JsonContent.Create(dispatcherRequest, typeof(DispatcherRequest));
 
                 string aggregatorAddress = await _paymentDispatcherDomain.GetAggregatorAddressByToken(dispatcherRequest.UniqueAggregatorToken);
 
-                var response = await client.PostAsync($"{aggregatorAddress}/api/payments/dispatcher/getpayment", content);
+                var response = await _httpClientSvc.PostAsync($"{aggregatorAddress}/api/payments/dispatcher/getpayment", content);
 
                 if (response.IsSuccessStatusCode)
                     return new AwaitingAddressResult(aggregatorAddress, dispatcherRequest.UniqueRequestToken);
@@ -167,10 +169,9 @@ namespace PaymentAggregatorDispatcher.Controllers
 
                 AwaitingAddressResult aggregatorAddress = await GetAwaitingAggregatorAdddress(tokens);
 
-                using HttpClient _httpClient = new();
                 using HttpRequestMessage targetRequestMessage = CreateTargetMessage(HttpContext, new Uri($"{aggregatorAddress}/callback/{paymentMethod}/{activity}"));
 
-                using HttpResponseMessage responseMessage = await _httpClient.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
+                using HttpResponseMessage responseMessage = await _httpClientSvc.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
 
                 HttpContext.Response.StatusCode = (int)responseMessage.StatusCode;
                 CopyFromTargetResponseHeaders(HttpContext, responseMessage);
