@@ -21,8 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PaymentDispatcher.Contracts\PaymentDispatcher.Contracts.csproj" />
     <ProjectReference Include="..\PaymentDispatcher.Database\PaymentDispatcher.Database.csproj" />
+    <ProjectReference Include="..\PaymentDispatcher.DataContracts\PaymentDispatcher.DataContracts.csproj" />
   </ItemGroup>
 
 </Project>
