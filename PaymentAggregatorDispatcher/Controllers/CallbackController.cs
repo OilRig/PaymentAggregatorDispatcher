@@ -169,7 +169,7 @@ namespace PaymentAggregatorDispatcher.Controllers
 
                 AwaitingAddressResult aggregatorAddress = await GetAwaitingAggregatorAdddress(tokens);
 
-                using HttpRequestMessage targetRequestMessage = CreateTargetMessage(HttpContext, new Uri($"{aggregatorAddress}/callback/{paymentMethod}/{activity}"));
+                using HttpRequestMessage targetRequestMessage = CreateTargetMessage(HttpContext, new Uri($"{aggregatorAddress.AggregatorAddress}/callback/{paymentMethod}/{activity}"));
 
                 using HttpResponseMessage responseMessage = await _httpClientSvc.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
 
