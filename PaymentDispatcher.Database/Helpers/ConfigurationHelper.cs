@@ -26,6 +26,12 @@ namespace PaymentDispatcher.Database.Helpers
                 .HasMaxLength(512)
                 .IsRequired();
 
+            modelBuilder.Entity<DispatcherDBRequest>()
+                .Property(x => x.Amount)
+                .IsRequired()
+                .HasColumnType("decimal")
+                .HasPrecision(18,2);
+
             return modelBuilder;
         }
         private static ModelBuilder ConfigureTokenMaps(this ModelBuilder modelBuilder)

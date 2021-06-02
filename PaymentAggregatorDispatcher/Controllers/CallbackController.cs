@@ -162,9 +162,15 @@ namespace PaymentAggregatorDispatcher.Controllers
                 EPaymentMethod method = (EPaymentMethod)Enum.Parse(typeof(EPaymentMethod), paymentMethod, true);
                 ETransactionIntent transactionIntent = GetIntentIfPossibleFromString(activity);
 
-                if (transactionIntent == ETransactionIntent.Undefined)
-                    return BadRequest();
+                _logger.LogInformation($"Handling callback for {method} - {transactionIntent}");
 
+                if (transactionIntent == ETransactionIntent.Undefined)
+                {
+                    _logger.LogError($"Unknown transaction intent {transactionIntent}");
+
+                    return BadRequest();
+                }
+                   
                 DispatcherRequest[] tokens = await _paymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(transactionIntent, method);
 
                 AwaitingAddressResult aggregatorAddress = await GetAwaitingAggregatorAdddress(tokens);
@@ -173,6 +179,8 @@ namespace PaymentAggregatorDispatcher.Controllers
 
                 using HttpResponseMessage responseMessage = await _httpClientSvc.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
 
+                _logger.LogInformation($"Aggregator response status: {responseMessage.StatusCode}");
+
                 HttpContext.Response.StatusCode = (int)responseMessage.StatusCode;
                 CopyFromTargetResponseHeaders(HttpContext, responseMessage);
                 await responseMessage.Content.CopyToAsync(HttpContext.Response.Body);
@@ -180,6 +188,8 @@ namespace PaymentAggregatorDispatcher.Controllers
                 if(responseMessage.IsSuccessStatusCode)
                 {
                     await _paymentDispatcherDomain.SetDispatchRequestCompleted(aggregatorAddress.RequestToken);
+
+                    _logger.LogInformation($"Request with token {aggregatorAddress.RequestToken} notified to {aggregatorAddress.AggregatorAddress}");
                 }    
 
                 await HttpContext.Response.CompleteAsync();

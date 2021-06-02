@@ -38,6 +38,8 @@ namespace PaymentAggregatorDispatcher.Controllers
                     Channel               = dispatcherRequest.Channel
                 });
 
+                _logger.LogInformation($"Request added. JSON data: {Newtonsoft.Json.JsonConvert.SerializeObject(dispatcherRequest)}");
+
                 return Ok();
             }
             catch (Exception ex)
@@ -55,6 +57,8 @@ namespace PaymentAggregatorDispatcher.Controllers
             try
             {
                 await _paymentDispatcherDomain.CancelDispatcherRequest(dispatcherRequest);
+
+                _logger.LogInformation($"Request declined. JSON data: {Newtonsoft.Json.JsonConvert.SerializeObject(dispatcherRequest)}");
 
                 return Ok();
             }
