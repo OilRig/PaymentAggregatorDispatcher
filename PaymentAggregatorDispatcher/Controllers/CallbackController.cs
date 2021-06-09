@@ -31,36 +31,6 @@ namespace PaymentAggregatorDispatcher.Controllers
             _httpClientSvc = dispatcherHttpClient;
         }
 
-        struct AwaitingAddressResult
-        {
-            public AwaitingAddressResult(string address, string requestToken)
-            {
-                AggregatorAddress = address;
-                RequestToken = requestToken;
-            }
-            public string AggregatorAddress { get; set; }
-
-            public string RequestToken { get; set; }
-
-            public static AwaitingAddressResult Empty => new(string.Empty, string.Empty);
-        }
-
-        private async ValueTask<AwaitingAddressResult> GetAwaitingAggregatorAdddress(DispatcherRequest[] requests)
-        {
-            foreach(DispatcherRequest dispatcherRequest in requests)
-            {
-                using JsonContent content = JsonContent.Create(dispatcherRequest, typeof(DispatcherRequest));
-
-                string aggregatorAddress = await _paymentDispatcherDomain.GetAggregatorAddressByToken(dispatcherRequest.UniqueAggregatorToken);
-
-                var response = await _httpClientSvc.PostAsync($"{aggregatorAddress}/api/payments/dispatcher/getpayment", content);
-
-                if (response.IsSuccessStatusCode)
-                    return new AwaitingAddressResult(aggregatorAddress, dispatcherRequest.UniqueRequestToken);
-            }
-
-            return AwaitingAddressResult.Empty;
-        }
         private static ETransactionIntent GetIntentIfPossibleFromString(string intentStr)
         {
             if(Enum.TryParse(typeof(ETransactionIntent), intentStr, true, out var normalIntent))
@@ -152,6 +122,17 @@ namespace PaymentAggregatorDispatcher.Controllers
             return new HttpMethod(method);
         }
 
+        private async Task EndRequest(HttpResponseMessage httpResponseMessage)
+        {
+            if(httpResponseMessage != null)
+            {
+                CopyFromTargetResponseHeaders(HttpContext, httpResponseMessage);
+
+                await httpResponseMessage.Content.CopyToAsync(HttpContext.Response.Body);
+            }
+            
+            await HttpContext.Response.CompleteAsync();
+        }
 
         [HttpPost]
         [Route("payments/callback/{paymentMethod}/{activity}")]
@@ -170,29 +151,34 @@ namespace PaymentAggregatorDispatcher.Controllers
 
                     return BadRequest();
                 }
-                   
-                DispatcherRequest[] tokens = await _paymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(transactionIntent, method);
 
-                AwaitingAddressResult aggregatorAddress = await GetAwaitingAggregatorAdddress(tokens);
+                AwaitingAddressResult[] tokens = await _paymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(transactionIntent, method);
 
-                using HttpRequestMessage targetRequestMessage = CreateTargetMessage(HttpContext, new Uri($"{aggregatorAddress.AggregatorAddress}/callback/{paymentMethod}/{activity}"));
-
-                using HttpResponseMessage responseMessage = await _httpClientSvc.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
-
-                _logger.LogInformation($"Aggregator response status: {responseMessage.StatusCode}");
-
-                HttpContext.Response.StatusCode = (int)responseMessage.StatusCode;
-                CopyFromTargetResponseHeaders(HttpContext, responseMessage);
-                await responseMessage.Content.CopyToAsync(HttpContext.Response.Body);
-
-                if(responseMessage.IsSuccessStatusCode)
+                foreach(AwaitingAddressResult address in tokens)
                 {
-                    await _paymentDispatcherDomain.SetDispatchRequestCompleted(aggregatorAddress.RequestToken);
+                    using HttpRequestMessage targetRequestMessage = CreateTargetMessage(HttpContext, new Uri($"{address.AggregatorAddress}/callback/{paymentMethod}/{activity}"));
 
-                    _logger.LogInformation($"Request with token {aggregatorAddress.RequestToken} notified to {aggregatorAddress.AggregatorAddress}");
-                }    
+                    using HttpResponseMessage responseMessage = await _httpClientSvc.SendAsync(targetRequestMessage, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
 
-                await HttpContext.Response.CompleteAsync();
+                    _logger.LogInformation($"Aggregator with address {address.AggregatorAddress} response status: {responseMessage.StatusCode}");
+
+                    if (responseMessage.IsSuccessStatusCode)
+                    {
+                        HttpContext.Response.StatusCode = (int)responseMessage.StatusCode;
+
+                        await _paymentDispatcherDomain.SetDispatchRequestCompleted(address.RequestToken);
+
+                        _logger.LogInformation($"Request with token {address.RequestToken} notified to {address.AggregatorAddress}");
+
+                        await EndRequest(responseMessage);
+
+                        break;
+                    }
+                }
+
+                HttpContext.Response.StatusCode = 500;
+
+                await EndRequest(null);
 
                 return null;
             }

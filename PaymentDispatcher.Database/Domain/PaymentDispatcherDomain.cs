@@ -16,13 +16,25 @@ namespace PaymentDispatcher.Database.Domain
         Task AddDispatcherRecord(DispatcherDBRequest dispatcherDBRequest);
 
         Task CancelDispatcherRequest(DispatcherRequest dispatcherRequest);
-        ValueTask<DispatcherRequest[]> GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method);
+        ValueTask<AwaitingAddressResult[]> GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method);
 
         Task SetDispatchRequestCompleted(string dispatcherRequestToken);
 
-        ValueTask<string> GetAggregatorAddressByToken(string token);
-
         ValueTask<DTO.AggregatorTokenMap[]> GetMaps();
+    }
+
+    public struct AwaitingAddressResult
+    {
+        public AwaitingAddressResult(string address, string requestToken)
+        {
+            AggregatorAddress = address;
+            RequestToken = requestToken;
+        }
+        public string AggregatorAddress { get; set; }
+
+        public string RequestToken { get; set; }
+
+        public static AwaitingAddressResult Empty => new(string.Empty, string.Empty);
     }
 
     public class PaymentDispatcherDomain : IPaymentDispatcherDomain
@@ -56,16 +68,6 @@ namespace PaymentDispatcher.Database.Domain
             }
         }
 
-        async ValueTask<string> IPaymentDispatcherDomain.GetAggregatorAddressByToken(string token)
-        {
-            var map = await _context.AggregatorTokenMaps.FirstOrDefaultAsync(map => map.AggregatorToken == token);
-
-            if (map != null)
-                return map.AggregatorAddress;
-
-            return string.Empty;
-        }
-
         async ValueTask<DTO.AggregatorTokenMap[]> IPaymentDispatcherDomain.GetMaps()
         {
             return await _context.AggregatorTokenMaps.Select(m => new DTO.AggregatorTokenMap()
@@ -76,26 +78,36 @@ namespace PaymentDispatcher.Database.Domain
             }).ToArrayAsync();
         }
 
-        async ValueTask<DispatcherRequest[]> IPaymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method)
+        async ValueTask<AwaitingAddressResult[]> IPaymentDispatcherDomain.GetUniqueTokensForAwaitingAggregators(ETransactionIntent intent, EPaymentMethod method)
         {
             var requests = await _context.DispatcherPaymentRequests
                 .Where(r => r.Method == method && r.Intent == intent && r.IsActive)
+                .Select(req => new { AggregatorToken = req.UniqueAggregatorToken, RequestToken = req.UniqueRequestToken })
                 .ToArrayAsync();
 
             if(requests.Any())
             {
-                return requests.Select(req => new DispatcherRequest()
+                var maps = await _context.AggregatorTokenMaps
+                    .Where(map => requests.Any(r => r.AggregatorToken == map.AggregatorToken))
+                    .ToArrayAsync();
+
+                if(maps.Any())
                 {
-                    Amount                = req.Amount,
-                    Channel               = req.Channel,
-                    Intent                = req.Intent,
-                    Method                = req.Method,
-                    UniqueAggregatorToken = req.UniqueAggregatorToken,
-                    UniqueRequestToken    = req.UniqueRequestToken
-                }).ToArray();
+                    List<AwaitingAddressResult> result = new();
+
+                    foreach(var map in maps)
+                    {
+                        string requestToken = requests.FirstOrDefault(r => r.AggregatorToken == map.AggregatorToken)?.RequestToken;
+
+                        if (!string.IsNullOrEmpty(requestToken))
+                            result.Add(new AwaitingAddressResult(map.AggregatorAddress, requestToken));
+                    }
+
+                    return result.ToArray();
+                }
             }
 
-            return Array.Empty<DispatcherRequest>();
+            return Array.Empty<AwaitingAddressResult>();
         }
 
         async Task IPaymentDispatcherDomain.CancelDispatcherRequest(DispatcherRequest dispatcherRequest)
